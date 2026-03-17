@@ -1545,18 +1545,147 @@ function loadHighPotentialDomains(){
         '<button class="hpd-analyze-btn" onclick="analyzeHPD(\''+d.domain+'\')">Analyze Domain →</button></div>';
     }).join('');
     setTimeout(function(){
-      grid.querySelectorAll('.hpd-score-val').forEach(function(el){
-        var target=+el.dataset.target,start=null;
-        function step(ts){if(!start)start=ts;var p=Math.min((ts-start)/900,1);el.textContent=Math.round((1-Math.pow(1-p,3))*target);if(p<1)requestAnimationFrame(step);else el.textContent=target;}
-        requestAnimationFrame(step);
-      });
-      grid.querySelectorAll('.hpd-score-bar-fill').forEach(function(el){el.style.width=el.dataset.pct+'%';});
-    },80);
-  },800+Math.random()*400);
+// =========================
+// DROP HUNTER (FIXED VERSION)
+// =========================
+
+var inlineDhAllResults = [];
+var inlineDhFilter = 'all';
+
+// ---------- BASE DATA (fallback pool) ----------
+var DH_RAW_POOL = [
+  'creatorvault.com','seniorfitnesslab.com','petinsurancehub.com','legalclaimassist.com',
+  'taxreliefgroup.com','homebuyershub.com','creditrepairlab.com','solarpanelquotes.com',
+  'weightlossclinic.com','medicareplanhub.com','personalloanassist.com','mortgagerefinancepro.com',
+  'roofingquotesonline.com','windowreplacementhub.com','autowarrantycenter.com','plumbingservicespro.com'
+];
+
+// ---------- INIT ----------
+function initInlineDH() {
+  inlineDhAllResults = getDroppedDomains();
+  applyInlineDHFilters();
 }
-function analyzeHPD(domain){
-  showPage('analyzer');
-  setTimeout(function(){var inp=document.getElementById('domainInput');if(inp){inp.value=domain;updateClearBtn();}analyzeDomain();},200);
+
+// ---------- GENERATE BASE DOMAINS ----------
+function getDroppedDomains() {
+  var out = DH_RAW_POOL.map(function(domain) {
+    var name = domain.replace(/\.com$/, '');
+    var words = splitIntoWords(name);
+
+    var score =
+      scoreBrandability(name, words, 'com').score +
+      scoreMarketDemand(name, words).score +
+      scoreSEO(name, words, 'com').score +
+      scoreMonetization(name, words).score +
+      scoreCommercialIntent(name, words).score;
+
+    return {
+      domain: domain,
+      score: score,
+      tag: dhGetTag(domain),
+      price: getDomainPrice(domain, true)
+    };
+  });
+
+  return out.sort(function(a,b){ return b.score - a.score; });
+}
+
+// ---------- SEARCH (NOW GENERATES DOMAINS) ----------
+function runDhSearch() {
+  var el = document.getElementById('inlineDhSearch');
+  var q = el ? el.value.trim().toLowerCase() : '';
+  var clearBtn = document.getElementById('inlineDhClear');
+
+  if (clearBtn) clearBtn.style.display = q ? 'flex' : 'none';
+
+  if (!q) {
+    inlineDhAllResults = getDroppedDomains();
+    applyInlineDHFilters();
+    return;
+  }
+
+  var generated = generateKeywordDropDomains(q);
+
+  inlineDhAllResults = generated;
+  inlineDhFilter = 'all';
+
+  renderInlineDHCards(generated);
+
+  var countEl = document.getElementById('inlineDhCount');
+  if (countEl) countEl.textContent = generated.length;
+}
+
+// ---------- GENERATOR ----------
+function generateKeywordDropDomains(keyword) {
+  var clean = keyword.replace(/[^a-z0-9]/g, '');
+  if (!clean) return [];
+
+  var suffixes = ['lab','vault','hub','zone','works','base','guide','academy','hq','studio','network','market','pro','club'];
+  var prefixes = ['get','go','try','join','build','start','launch','use','my','the','smart','best'];
+
+  var results = [];
+  var seen = {};
+
+  function addDomain(domain) {
+    if (seen[domain]) return;
+    seen[domain] = true;
+
+    var name = domain.replace(/\.com$/,'');
+    var words = splitIntoWords(name);
+
+    var score =
+      scoreBrandability(name, words, 'com').score +
+      scoreMarketDemand(name, words).score +
+      scoreSEO(name, words, 'com').score +
+      scoreMonetization(name, words).score +
+      scoreCommercialIntent(name, words).score;
+
+    results.push({
+      domain: domain,
+      score: score,
+      tag: dhGetTag(domain),
+      price: getDomainPrice(domain, true)
+    });
+  }
+
+  suffixes.forEach(function(s){ addDomain(clean + s + '.com'); });
+  prefixes.forEach(function(p){ addDomain(p + clean + '.com'); });
+  suffixes.forEach(function(s){ addDomain(clean + 'my' + s + '.com'); });
+
+  return results.sort(function(a,b){ return b.score - a.score; }).slice(0, 24);
+}
+
+// ---------- FILTER ----------
+function applyInlineDHFilters() {
+  var filtered = inlineDhAllResults.filter(function(d){
+    if (inlineDhFilter === 'available') return d.price.type !== 'taken';
+    return true;
+  });
+
+  renderInlineDHCards(filtered);
+
+  var countEl = document.getElementById('inlineDhCount');
+  if (countEl) countEl.textContent = filtered.length;
+}
+
+// ---------- CLEAR SEARCH ----------
+function clearDhSearch() {
+  var el = document.getElementById('inlineDhSearch');
+  if (el) el.value = '';
+
+  var clearBtn = document.getElementById('inlineDhClear');
+  if (clearBtn) clearBtn.style.display = 'none';
+
+  inlineDhAllResults = getDroppedDomains();
+  applyInlineDHFilters();
+}
+
+// ---------- TAGGING ----------
+function dhGetTag(domain) {
+  if (/loan|credit|finance/.test(domain)) return 'Finance';
+  if (/health|med|care/.test(domain)) return 'Health';
+  if (/home|roof|plumb|solar/.test(domain)) return 'Home Services';
+  return 'General';
 }
 
 // ── FEEDBACK ──
